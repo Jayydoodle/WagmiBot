@@ -1,6 +1,6 @@
 ﻿using CopyTradeBot.BAL;
-using CustomSpectreConsole;
-using CustomSpectreConsole.Settings;
+using JConsole;
+using JConsole.Settings;
 using Spectre.Console;
 
 namespace CopyTradeBot

@@ -1,4 +1,4 @@
-﻿using CustomSpectreConsole;
+﻿using JConsole;
 
 namespace CopyTradeBot.BAL
 {

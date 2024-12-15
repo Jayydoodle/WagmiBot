@@ -1,5 +1,5 @@
 ﻿using CopyTradeBot;
-using CustomSpectreConsole;
+using JConsole;
 using Spectre.Console;
 using System.Configuration;
 

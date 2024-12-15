@@ -12,6 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\JConsole\JConsole\JConsole.csproj" />
     <ProjectReference Include="..\CopyTradeBot.BAL\CopyTradeBot.BAL.csproj" />
   </ItemGroup>
 

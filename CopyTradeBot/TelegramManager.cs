@@ -1,4 +1,4 @@
-﻿using CustomSpectreConsole;
+﻿using JConsole;
 using Newtonsoft.Json;
 using OfficeOpenXml;
 using Spectre.Console;
@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using TL;
 using WTelegram;
-using CustomSpectreConsole.Settings;
+using JConsole.Settings;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using CopyTradeBot.BAL;
 
@@ -30,10 +30,10 @@ namespace CopyTradeBot
         #region Life Cycle
 
         [Documentation(Documentation)]
-        public override async void Run()
+        public override void Run()
         {
             LoginUser();
-            await RunProgramLoop();
+            RunProgramLoop();
         }
 
         #endregion
