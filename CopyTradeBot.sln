@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CopyTradeBot.BAL", "CopyTra
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CopyTradeBot", "CopyTradeBot\CopyTradeBot.csproj", "{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JConsole", "..\JConsole\JConsole\JConsole.csproj", "{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
