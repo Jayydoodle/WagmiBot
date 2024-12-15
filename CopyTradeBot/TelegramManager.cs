@@ -11,7 +11,6 @@ using System.Text;
 using System.Threading.Tasks;
 using TL;
 using WTelegram;
-using JConsole.Settings;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using CopyTradeBot.BAL;
 
@@ -30,10 +29,10 @@ namespace CopyTradeBot
         #region Life Cycle
 
         [Documentation(Documentation)]
-        public override void Run()
+        protected override bool Initialize()
         {
             LoginUser();
-            RunProgramLoop();
+            return true;
         }
 
         #endregion
