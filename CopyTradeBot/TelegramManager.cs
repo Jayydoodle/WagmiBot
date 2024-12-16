@@ -32,16 +32,15 @@ namespace CopyTradeBot
         private WTelegram.Client TelegramClient { get; set; }
         private UpdateManager UpdateManager { get; set; }
         private User CurrentUser { get; set; }
-        private TelegramChat SourceChat { get; set; }
-        private TelegramChat DestinationChat { get; set; }
-        private ForumTopic SelectedTopic { get; set; }
+        private TelegramChannel SourceChannel { get; set; }
 
         #endregion
 
         #region Properties: Concurrency
 
         private static ConcurrentQueue<string> ContractAddressQueue = new ConcurrentQueue<string>();
-        private static SemaphoreSlim SourceSemaphore = new SemaphoreSlim(1, 1);
+        private static ConcurrentBag<string> SeenAddresses = new ConcurrentBag<string>();
+        private static SemaphoreSlim ChannelSemaphore = new SemaphoreSlim(1, 1);
 
         #endregion
 
@@ -63,82 +62,163 @@ namespace CopyTradeBot
 
         protected override List<MenuOption> GetMenuOptions()
         {
-            List<MenuOption> menuOptions = new List<MenuOption>
-            {
-                new MenuOption(nameof(ChangeUser).SplitByCase(), ChangeUser),
-                new MenuOption("Start/Stop Listener", StartStopListener),
-                new MenuOption(nameof(ShowChannels).SplitByCase(), ShowChannels),
-                new MenuOption(nameof(SelectSourceChannel).SplitByCase(), SelectSourceChannel),
-                new MenuOption(nameof(SelectDestinationChannel).SplitByCase(), SelectDestinationChannel),
-                new MenuOption(nameof(SendMessageToChat).SplitByCase(), SendMessageToChat),
-                new MenuOption(nameof(ViewQueuedAddresses).SplitByCase(), ViewQueuedAddresses)
-            };
+            List<MenuOption> menuOptions = new List<MenuOption>();
+            menuOptions.Add(new MenuOption(nameof(ChangeUserAccount).SplitByCase(), ChangeUserAccount));
+            menuOptions.Add(new MenuOption(nameof(SelectChannel).SplitByCase(), SelectChannel));
+            menuOptions.Add(new MenuOption(nameof(ViewChannels).SplitByCase(), ViewChannels));
 
-            return menuOptions;
+            ChannelSemaphore.Wait();
+
+            if (SourceChannel != null)
+            {
+                menuOptions.Add(new MenuOption("Start/Stop Listener", StartStopListener));
+                menuOptions.Add(new MenuOption(nameof(SelectChannelTopic).SplitByCase(), () => SelectChannelTopic(true)));
+                menuOptions.Add(new MenuOption(nameof(SelectChannelUser).SplitByCase(), () => SelectChannelUser(true)));
+                menuOptions.Add(new MenuOption(nameof(SendMessageToChannel).SplitByCase(), SendMessageToChannel));
+                menuOptions.Add(new MenuOption(nameof(ViewQueuedAddresses).SplitByCase(), ViewQueuedAddresses));
+            }
+
+            ChannelSemaphore.Release();
+
+            return menuOptions.OrderBy(x => x.DisplayName).ToList();
         }
 
-        [Documentation(ChangeUserDocumentation)]
-        private void ChangeUser()
+        [Documentation(ChangeUserAccountDocumentation)]
+        private void ChangeUserAccount()
         {
             XMLSettings.Update(Settings.TelegramPhoneNumber, string.Empty);
 
             if (TelegramClient != null)
                 TelegramClient.Reset();
 
-            SourceSemaphore.Wait();
-            SourceChat = null;
-            SourceSemaphore.Release();
+            ChannelSemaphore.Wait();
+
+            SourceChannel = null;
+            XMLSettings.Update(Settings.TelegramChannelId, string.Empty);
+            XMLSettings.Update(Settings.TelegramTopicId, string.Empty);
+            XMLSettings.Update(Settings.TelegramTargetUserId, string.Empty);
+
+            ChannelSemaphore.Release();
 
             CurrentUser = null;
 
             LoginUser();
         }
 
-        [Documentation(SelectSourceChannelDocumentation)]
-        private void SelectSourceChannel()
+        [Documentation(SelectChannelDocumentation)]
+        private void SelectChannel()
         {
-            SourceSemaphore.Wait();
-            SourceChat = SelectChat(Settings.TelegramSourceChannelId);
-            SourceSemaphore.Release();
-        }
+            ChannelSemaphore.Wait();
 
-        [Documentation(SelectDestinationChannelDocumentation)]
-        private void SelectDestinationChannel()
-        {
-            DestinationChat = SelectChat(Settings.TelegramDestinationChannelId);
-        }
-
-        [Documentation(SendMessageToChatDocumentation)]
-        private void SendMessageToChat()
-        {
-            InputPeer target = SourceChat.Instance;
-            InputReplyToMessage replyTo = null;
-
-            if (SourceChat.Topics.Any())
+            try
             {
-                SelectionPrompt<ForumTopic> prompt = new SelectionPrompt<ForumTopic>();
-                prompt.Title = "Select the topic you want to send the message in";
-                prompt.Converter = x => x.title;
-                prompt.AddChoices(SourceChat.Topics);
+                SourceChannel = SelectChat(Settings.TelegramChannelId);
+                SelectChannelTopic(false);
 
-                ForumTopic choice = AnsiConsole.Prompt(prompt);
-
-                if (choice.id != 1)
-                    replyTo = new InputReplyToMessage() { top_msg_id = choice.id, reply_to_msg_id = choice.id, flags = InputReplyToMessage.Flags.has_top_msg_id };
+                if (SourceChannel != null)
+                {
+                    ChannelSemaphore.Release();
+                    WriteHeaderToConsole();
+                }
+                else
+                {
+                    ChannelSemaphore.Release();
+                }
             }
-
-            while (true)
+            catch (Exception)
             {
-                string text = ConsoleUtil.GetInput("Enter the text you want to sent to the channel.  Enter [red]CANCEL[/] to stop");
-                Task.Run<UpdatesBase>(async () => await TelegramClient.Messages_SendMessage(target, text, Helpers.RandomLong(), replyTo));
+                ChannelSemaphore.Release();
+                throw;
             }
         }
 
-        [Documentation(ShowChannelsDocumentation)]
-        private void ShowChannels()
+        [Documentation(SelectChannelTopicDocumentation)]
+        private void SelectChannelTopic(bool fromMenuAction = false)
         {
-            foreach (var chat in TelegramChat.GetAll(TelegramClient))
-                AnsiConsole.MarkupLine("[blue]{0}[/]\t{1}", chat.ID, chat.Title);
+            if (fromMenuAction)
+                ChannelSemaphore.Wait();
+
+            if (SourceChannel != null)
+            {
+                List<ForumTopic> topicList = SourceChannel.Topics;
+                SourceChannel.SelectedTopic = null;
+
+                if (topicList != null && topicList.Any())
+                {
+                    SelectionPrompt<ForumTopic> prompt = new SelectionPrompt<ForumTopic>();
+                    prompt.Title = "\nSelect the topic you want the listener to target:";
+                    prompt.Converter = x => x.title;
+                    prompt.AddChoice(new ForumTopic() { id = -1, title = "-- REMOVE CURRENT TOPIC --" });
+                    prompt.AddChoices(topicList);
+
+                    ForumTopic choice = AnsiConsole.Prompt(prompt);
+
+                    if (choice.id == -1)
+                    {
+                        SourceChannel.SelectedTopic = null;
+                        XMLSettings.Update(Settings.TelegramTopicId, string.Empty);
+                    }
+                    else
+                    {
+                        SourceChannel.SelectedTopic = choice;
+                        XMLSettings.Update(Settings.TelegramTopicId, choice.id.ToString());
+                    }
+                }
+            }
+
+            if (fromMenuAction) 
+            { 
+                ChannelSemaphore.Release();
+                WriteHeaderToConsole();
+            }
+        }
+
+        [Documentation(SelectChannelUserDocumentation)]
+        private void SelectChannelUser(bool fromMenuAction = false)
+        {
+            if (fromMenuAction)
+                ChannelSemaphore.Wait();
+
+            if (SourceChannel != null)
+            {
+                List<User> userList = SourceChannel.Users;
+                SourceChannel.SelectedUser = null;
+
+                if (userList != null && userList.Any())
+                {
+                    SelectionPrompt<User> prompt = new SelectionPrompt<User>();
+                    prompt.Title = "\nSelect the user you want the listener to target:";
+                    prompt.Converter = x => x.MainUsername ?? x.first_name;
+                    prompt.AddChoice(new User() { id = -1, first_name = "-- REMOVE CURRENT USER --" });
+                    prompt.AddChoices(userList);
+
+                    User choice = AnsiConsole.Prompt(prompt);
+
+                    if (choice.id == -1)
+                    {
+                        SourceChannel.SelectedUser = null;
+                        XMLSettings.Update(Settings.TelegramTargetUserId, string.Empty);
+                    }
+                    else
+                    {
+                        SourceChannel.SelectedUser = choice;
+                        XMLSettings.Update(Settings.TelegramTargetUserId, choice.ID.ToString());
+                    }
+                }
+            }
+
+            if (fromMenuAction)
+            {
+                ChannelSemaphore.Release();
+                WriteHeaderToConsole();
+            }
+        }
+
+        [Documentation(SendMessageToChannelDocumentation)]
+        private void SendMessageToChannel()
+        {
+            string text = ConsoleUtil.GetInput("Enter the text you want to sent to the channel.  Enter [red]CANCEL[/] to stop");
+            SendMessage(text);
         }
 
         [Documentation(StartStopListenerDocumentation)]
@@ -155,6 +235,13 @@ namespace CopyTradeBot
             }
 
             WriteHeaderToConsole();
+        }
+
+        [Documentation(ViewChannelsDocumentation)]
+        private void ViewChannels()
+        {
+            foreach (var chat in TelegramChannel.GetAll(TelegramClient))
+                AnsiConsole.MarkupLine("[blue]{0}[/]\t{1}", chat.ID, chat.Title);
         }
 
         [Documentation(ViewQueuedAddressesDocumentation)]
@@ -189,12 +276,15 @@ namespace CopyTradeBot
 
         private Task HandleMessage(MessageBase messageBase, bool edit = false)
         {
-            SourceSemaphore.WaitAsync();
+            ChannelSemaphore.Wait();
 
-            if (SourceChat == null || messageBase.Peer.ID != SourceChat.ID)
+            if (SourceChannel == null || SourceChannel.Invalidate(messageBase))
+            {
+                ChannelSemaphore.Release();
                 return Task.CompletedTask;
+            }
 
-            SourceSemaphore.Release();
+            ChannelSemaphore.Release();
 
             if(!(messageBase is Message message && !string.IsNullOrEmpty(message.message)))
                 return Task.CompletedTask;
@@ -204,17 +294,47 @@ namespace CopyTradeBot
 
             foreach (string piece in message.message.Split(new char[] { '\n', '\t', '\r' }))
             {
-                publicKey = new PublicKey(piece);
+                try
+                {
+                    publicKey = new PublicKey(piece);
+                }
+                catch (Exception)
+                {
+                    publicKey = null;
+                }
+
                 foundSolanaAddress = publicKey != null && publicKey.IsValid();
 
                 if (foundSolanaAddress)
                     break;
             }
 
-            if (foundSolanaAddress)
+            if (foundSolanaAddress && !SeenAddresses.Contains(publicKey.Key))
+            {
+                SeenAddresses.Add(publicKey.Key);
                 ContractAddressQueue.Enqueue(publicKey.Key);
+            }
 
             return Task.CompletedTask;
+        }
+
+        private void SendMessage(string text)
+        {
+            ChannelSemaphore.Wait();
+
+            if (SourceChannel != null)
+            {
+                InputPeer target = SourceChannel.Instance;
+                InputReplyToMessage replyTo = null;
+
+                if (SourceChannel.SelectedTopic != null && SourceChannel.SelectedTopic.id != 1)
+                    replyTo = new InputReplyToMessage() { top_msg_id = SourceChannel.SelectedTopic.id, reply_to_msg_id = SourceChannel.SelectedTopic.id, flags = InputReplyToMessage.Flags.has_top_msg_id };
+
+                if (!string.IsNullOrEmpty(text))
+                    Task.Run<UpdatesBase>(async () => await TelegramClient.Messages_SendMessage(target, text, Helpers.RandomLong(), replyTo));
+            }
+
+            ChannelSemaphore.Release();
         }
 
         protected override void WriteHeaderToConsole()
@@ -226,10 +346,24 @@ namespace CopyTradeBot
             else
                 AnsiConsole.MarkupLine("\nAn error occurred while attempting to login.  Please select 'change user' and try again.\n");
 
-            if (SourceChat != null)
-                AnsiConsole.MarkupLine("You are listening to the chat [blue]{0}[/]\n", SourceChat.Title);
+            ChannelSemaphore.Wait();
 
-            if(UpdateManager != null)
+            if (SourceChannel != null)
+            {
+                string message = string.Format("You are listening to the channel [blue]{0}[/] ", SourceChannel.Title);
+
+                if (SourceChannel.SelectedTopic != null)
+                    message += string.Format("in the topic [blue]{0}[/] ", SourceChannel.SelectedTopic.title);
+
+                if (SourceChannel.SelectedUser != null)
+                    message += string.Format("to the user [blue]{0}[/] ", SourceChannel.SelectedUser.MainUsername ?? SourceChannel.SelectedUser.first_name);
+
+                AnsiConsole.MarkupLine(message + "\n");
+            }
+
+            ChannelSemaphore.Release();
+
+            if (UpdateManager != null)
                 AnsiConsole.MarkupLine("[green]Listener is running[/]\n");
             else
                 AnsiConsole.MarkupLine("[orange1]Listener is stopped[/]\n");
@@ -243,6 +377,7 @@ namespace CopyTradeBot
                 case "api_hash": return XMLSettings.GetSetting(Settings.TelegramAPIHash, Validate);
                 case "phone_number": return XMLSettings.GetSetting(Settings.TelegramPhoneNumber, Validate);
                 case "verification_code": Console.Write("Enter the verification code sent to your Telegram app: "); return Console.ReadLine();
+                case "password": return ConsoleUtil.GetInput(new PromptSettings() { Prompt = "Enter your password", IsSecret = true });
                 default: return null; // let WTelegramClient decide the default config
             }
         }
@@ -259,12 +394,12 @@ namespace CopyTradeBot
                     AnsiConsole.WriteLine("Invalid phone number.");
             }
 
-            if (node.Name == Settings.TelegramSourceChannelId.Name)
+            if (node.Name == Settings.TelegramChannelId.Name)
             {
                 validated = value.IsNumeric();
 
                 if (!validated)
-                    AnsiConsole.WriteLine("Invalid chat Id.");
+                    AnsiConsole.WriteLine("Invalid channel Id.");
             }
 
             return validated;
@@ -277,9 +412,24 @@ namespace CopyTradeBot
                 if (CurrentUser == null)
                     CurrentUser = Task.Run<User>(async () => await TelegramClient.LoginUserIfNeeded()).Result;
 
-                SourceSemaphore.Wait();
-                SourceChat = LoadChat(Settings.TelegramSourceChannelId);
-                SourceSemaphore.Release();
+                ChannelSemaphore.Wait();
+
+                SourceChannel = LoadChat(Settings.TelegramChannelId);
+
+                if (SourceChannel != null)
+                {
+                    int.TryParse(XMLSettings.GetValue(Settings.TelegramTopicId), out int topicId);
+
+                    if (topicId > 0)
+                        SourceChannel.SelectedTopic = SourceChannel.Topics.FirstOrDefault(x => x.id == topicId);
+
+                    long.TryParse(XMLSettings.GetValue(Settings.TelegramTargetUserId), out long userId);
+
+                    if (userId > 0)
+                        SourceChannel.SelectedUser = SourceChannel.Users.FirstOrDefault(x => x.id == userId);
+                }
+
+                ChannelSemaphore.Release();
             }
             catch (Exception e)
             {
@@ -287,31 +437,29 @@ namespace CopyTradeBot
             }
         }
 
-        private TelegramChat SelectChat(Settings setting)
+        private TelegramChannel SelectChat(Settings setting)
         {
-            TelegramChat chat = null;
+            TelegramChannel chat = null;
 
             XMLSettings.Update(setting, string.Empty);
             string chatId = XMLSettings.GetSetting(setting, Validate);
             chat = LoadChat(setting, chatId);
 
             if (chat == null)
-                Logger.LogWarning(string.Format("A chat with the ID: [red]{0}[/] was not found", chatId));
-            else
-                WriteHeaderToConsole();
-
+                Logger.LogWarning(string.Format("A channel with the ID: [red]{0}[/] was not found", chatId));
+                
             return chat;
         }
 
-        private TelegramChat LoadChat(Settings setting, string chatId = null)
+        private TelegramChannel LoadChat(Settings setting, string chatId = null)
         {
-            TelegramChat chat = null;
+            TelegramChannel chat = null;
 
             if (chatId == null)
                 chatId = XMLSettings.GetValue(setting);
 
             if (!string.IsNullOrEmpty(chatId))
-                chat = TelegramChat.GetAll(TelegramClient).FirstOrDefault(x => x.ID == long.Parse(chatId));
+                chat = TelegramChannel.GetAll(TelegramClient).FirstOrDefault(x => x.ID == long.Parse(chatId));
 
             return chat;
         }
@@ -320,17 +468,18 @@ namespace CopyTradeBot
 
         #region Documentation 
 
+        private const string ChangeUserAccountDocumentation = "Prompts to enter in your user information to login to your Telegram account";
         private const string Documentation = "api_id: your application api ID from my.telegram.org/apps\n" +
             "api_hash: your api hash from my.telegram.org/apps\n" +
             "phone_number: the phone number of your telegram account\n" +
             "verification_code: the verification code sent to your telegram app";
-        private const string SelectSourceChannelDocumentation = "Select the channel that the listener will point to to read contract addresses";
-        private const string SelectDestinationChannelDocumentation = "Select the channel hosting the bot you will use to send contract addresses to for buying tokens";
-        private const string SendMessageToChatDocumentation = "Sends a message to your selected chat";
-        private const string ShowChannelsDocumentation = "Shows the list of telegram channels that you belong to";
+        private const string SelectChannelDocumentation = "Select the channel that the listener will use to read contract addresses";
+        private const string SelectChannelTopicDocumentation = "Prompts to change the telegram group topic of the selected channel that the listener will use to read contract addresses";
+        private const string SelectChannelUserDocumentation = "Prompts to select a telegram user from the selected channel.  The listener ONLY read input from this user.";
+        private const string SendMessageToChannelDocumentation = "Sends a message to your selected channel/topic";
         private const string StartStopListenerDocumentation = "Starts or stops the listener that will read contract addresses from your source Telegram channel";
+        private const string ViewChannelsDocumentation = "Shows the list of telegram channels that you belong to";
         private const string ViewQueuedAddressesDocumentation = "View the list of contract addresses currently in the queue";
-        private const string ChangeUserDocumentation = "Prompts to enter in your user information to login to your Telegram account";
 
         #endregion
     }

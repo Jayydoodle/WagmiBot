@@ -8,7 +8,7 @@ using WTelegram;
 
 namespace CopyTradeBot.BAL
 {
-    public class TelegramChat
+    public class TelegramChannel
     {
         #region Properties
 
@@ -29,7 +29,11 @@ namespace CopyTradeBot.BAL
                     try
                     {
                         var query = Task.Run<Messages_ForumTopics>(async () => await Client.Channels_GetAllForumTopics(Instance as Channel)).Result;
-                        _topics = query.topics.Where(x => x is ForumTopic).Select(x => x as ForumTopic).ToList();
+
+                        _topics = query.topics.Where(x => x is ForumTopic)
+                                              .Where(x => x.ID != 1) // exclude general topic
+                                              .Select(x => x as ForumTopic)
+                                              .ToList();
                     }
                     catch (Exception)
                     {
@@ -39,13 +43,40 @@ namespace CopyTradeBot.BAL
                 return _topics;
             }
         }
+
+        private List<User> _users;
+        public List<User> Users
+        {
+            get
+            {
+                if (_users == null)
+                {
+                    _users = new List<User>();
+
+                    try
+                    {
+                        var query = Task.Run<Channels_ChannelParticipants>(async () => await Client.Channels_GetAllParticipants(Instance as Channel)).Result;
+                        _users = query.users.Values.ToList();
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+
+                return _users;
+            }
+        }
+
+        public ForumTopic SelectedTopic { get; set; }
+        public User SelectedUser { get; set; }
+
         private Client Client { get; set; }
 
         #endregion
 
         #region Life Cycle
 
-        public TelegramChat(ChatBase chat, Client client)
+        public TelegramChannel(ChatBase chat, Client client)
         {
             ID = chat.ID;
             Title = chat.Title;
@@ -58,13 +89,20 @@ namespace CopyTradeBot.BAL
 
         #region Public API
 
-        public static IEnumerable<TelegramChat> GetAll(Client client)
+        public bool Invalidate(MessageBase message)
+        {
+            return SelectedTopic == null && message.Peer.ID != ID
+             || SelectedTopic != null && (message.ReplyHeader == null || (message.ReplyHeader != null && message.ReplyHeader.TopicID != SelectedTopic.ID))
+             || SelectedUser != null && (message.From == null || (message.From != null && message.From.ID != SelectedUser.ID));
+        }
+
+        public static IEnumerable<TelegramChannel> GetAll(Client client)
         {
             var query = Task.Run<Messages_Chats>(async () => await client.Messages_GetAllChats()).Result;
             var chats = query.chats.Values
                 .Where(x => x.IsActive)
                 .OrderBy(x => x.Title)
-                .Select(x => new TelegramChat(x, client));
+                .Select(x => new TelegramChannel(x, client));
 
             return chats;
         }
