@@ -39,9 +39,24 @@ namespace CopyTradeBot.BAL
             Name = nameof(TelegramPhoneNumber),
         };
 
-        public static Settings TelegramChatId => new Settings()
+        public static Settings TelegramSourceChannelId => new Settings()
         {
-            Name = nameof(TelegramChatId),
+            Name = nameof(TelegramSourceChannelId),
+        };
+
+        public static Settings TelegramSourceChannelForumId => new Settings()
+        {
+            Name = nameof(TelegramSourceChannelForumId),
+        };
+
+        public static Settings TelegramSourceChannelUserId => new Settings()
+        {
+            Name = nameof(TelegramSourceChannelUserId),
+        };
+
+        public static Settings TelegramDestinationChannelId => new Settings()
+        {
+            Name = nameof(TelegramDestinationChannelId),
         };
 
         #endregion
