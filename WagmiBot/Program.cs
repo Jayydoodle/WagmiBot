@@ -6,7 +6,7 @@ using System.Configuration;
 
 class Program
 {
-    private const string ApplicationName = "CopyTrade Bot";
+    private const string ApplicationName = "Wagmi Bot";
     private const string VersionNumber = "1.0";
 
     static void Main(string[] args)
