@@ -3,9 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33626.354
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CopyTradeBot.BAL", "CopyTradeBot.BAL\CopyTradeBot.BAL.csproj", "{8E6528A2-2878-49B0-ACD6-4FA6BE14800E}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CopyTradeBot", "CopyTradeBot\CopyTradeBot.csproj", "{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WagmiBot", "WagmiBot\WagmiBot.csproj", "{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JConsole", "..\JConsole\JConsole\JConsole.csproj", "{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}"
 EndProject
@@ -15,10 +13,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{8E6528A2-2878-49B0-ACD6-4FA6BE14800E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8E6528A2-2878-49B0-ACD6-4FA6BE14800E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8E6528A2-2878-49B0-ACD6-4FA6BE14800E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8E6528A2-2878-49B0-ACD6-4FA6BE14800E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CE50E3FF-61AF-4AD1-B28E-7EC539EF57F1}.Release|Any CPU.ActiveCfg = Release|Any CPU

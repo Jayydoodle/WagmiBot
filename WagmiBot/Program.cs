@@ -1,4 +1,4 @@
-﻿using CopyTradeBot;
+﻿using WagmiBot;
 using JConsole;
 using JConsole.Console;
 using Spectre.Console;
@@ -28,7 +28,8 @@ class Program
     {
         List<MenuOption> menuOptions = new List<MenuOption>();
 
-        menuOptions.Add(TelegramManager.Instance);
+        menuOptions.Add(WagmiClientManager.Instance);
+        menuOptions.Add(UserClientManager.Instance);
         menuOptions.Add(ConsoleFunction.GetHelpOption());
         menuOptions.Add(new MenuOption(GlobalConstants.SelectionOptions.Exit, null));
 

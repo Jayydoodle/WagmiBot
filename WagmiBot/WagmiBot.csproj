@@ -1,18 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <OutputType>Exe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="ClientBot.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Solnet.Wallet" Version="6.1.0" />
+    <PackageReference Include="WTelegramBot" Version="8.1.1" />
     <PackageReference Include="WTelegramClient" Version="4.2.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\JConsole\JConsole\JConsole.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Interfaces\" />
+    <Folder Include="obj\" />
   </ItemGroup>
 
 </Project>

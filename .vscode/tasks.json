@@ -7,7 +7,7 @@
             "type": "process",
             "args": [
                 "build",
-                "${workspaceFolder}\\CopyTradeBot\\CopyTradeBot.csproj",
+                "${workspaceFolder}\\WagmiBot\\WagmiBot.csproj",
                 "/property:GenerateFullPaths=true",
                 "/consoleloggerparameters:NoSummary"
             ],

@@ -1,6 +1,6 @@
 ﻿using JConsole;
 
-namespace CopyTradeBot.BAL
+namespace WagmiBot
 {
     public class Settings : SettingsNode<Settings>
     {
@@ -34,24 +34,9 @@ namespace CopyTradeBot.BAL
             Name = nameof(TelegramAPIKey),
         };
 
-        public static Settings TelegramPhoneNumber => new Settings()
+        public static Settings WagmiBotToken => new Settings()
         {
-            Name = nameof(TelegramPhoneNumber),
-        };
-
-        public static Settings TelegramChannelId => new Settings()
-        {
-            Name = nameof(TelegramChannelId),
-        };
-
-        public static Settings TelegramTopicId => new Settings()
-        {
-            Name = nameof(TelegramTopicId),
-        };
-
-        public static Settings TelegramTargetUserId => new Settings()
-        {
-            Name = nameof(TelegramTargetUserId),
+            Name = nameof(WagmiBotToken),
         };
 
         #endregion

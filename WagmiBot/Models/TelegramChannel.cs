@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using TL;
 using WTelegram;
 
-namespace CopyTradeBot.BAL
+namespace WagmiBot
 {
     public class TelegramChannel
     {
