@@ -9,6 +9,8 @@ using Message = Telegram.Bot.Types.Message;
 using Update = Telegram.Bot.Types.Update;
 using JConsole;
 using Spectre.Console;
+using Solnet.JupiterSwap;
+using Solnet.JupiterSwap.Models;
 
 namespace WagmiBot
 {
@@ -52,6 +54,9 @@ namespace WagmiBot
             if (RunTask == null)
                 menuOptions.Add(new MenuOption(nameof(StartBot).SplitByCase(), StartBot));
 
+            menuOptions.Add(new MenuOption(nameof(GetToken).SplitByCase(), GetToken));
+            //menuOptions.Add(new MenuOption(nameof(GetAllTokens).SplitByCase(), GetAllTokens));
+
             return menuOptions;
         }
 
@@ -62,6 +67,28 @@ namespace WagmiBot
                 RunTask = Task.Run(() => WagmiClient.StartBotAsync());
 
             WriteHeaderToConsole();
+        }
+
+        private void GetToken()
+        {
+            string tokenAddress = ConsoleUtil.GetInput("Enter the token address or symbol");
+
+            TokenData token = null;
+            
+            if (tokenAddress.StartsWith("$"))
+                token = Task.Run(() => JupiterDexAg.Instance.GetTokenBySymbol(tokenAddress)).Result;
+            else 
+                token = Task.Run(() => JupiterDexAg.Instance.GetTokenByMint(tokenAddress)).Result;
+
+            if (token != null)
+                AnsiConsole.MarkupLine("\n[blue]Token:[/] {0}\n[blue]Token:[/] {1}\n[blue]CA:[/] {1}\n[blue]Symbol:[/] {2}", token.Name, token.Mint, token.Symbol);
+            else
+                AnsiConsole.MarkupLine("[red]Token was not found[/]");
+        }
+
+        private void GetAllTokens()
+        {
+            var token = Task.Run(() => JupiterDexAg.Instance.GetTokens()).Result;
         }
 
         protected override void WriteHeaderToConsole()

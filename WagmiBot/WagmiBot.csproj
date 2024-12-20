@@ -19,6 +19,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\JConsole\JConsole\JConsole.csproj" />
+    <ProjectReference Include="..\Solnet.JupiterSwap\Solnet.JupiterSwap.csproj" />
+    <ProjectReference Include="..\Solnet.TokenInfo\Solnet.TokenInfo.csproj" />
   </ItemGroup>
 
   <ItemGroup>

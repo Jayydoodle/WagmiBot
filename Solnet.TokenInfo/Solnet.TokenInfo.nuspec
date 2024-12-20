@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata>
+    <id>Solnet.TokenInfo</id>
+    <version>0.1.0-alpha</version>
+    <title>Solnet.TokenInfo</title>
+    <authors>WagmiBot Team</authors>
+    <owners>WagmiBot Team</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A .NET library for retrieving comprehensive information about Solana tokens directly from the blockchain.</description>
+    <summary>Solana token information retrieval library</summary>
+    <tags>solana blockchain token info cryptocurrency</tags>
+    <dependencies>
+      <dependency id="Solnet.Rpc" version="5.1.0" />
+      <dependency id="Solnet.Wallet" version="5.1.0" />
+      <dependency id="Newtonsoft.Json" version="13.0.3" />
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\Release\net7.0\Solnet.TokenInfo.dll" target="lib\net7.0" />
+    <file src="README.md" target="" />
+  </files>
+</package>

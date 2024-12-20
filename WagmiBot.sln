@@ -7,6 +7,10 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WagmiBot", "WagmiBot\WagmiB
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "JConsole", "..\JConsole\JConsole\JConsole.csproj", "{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Solnet.JupiterSwap", "Solnet.JupiterSwap\Solnet.JupiterSwap.csproj", "{DE057CF2-98B8-DF9F-6D54-CEF68ABEAEB8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Solnet.TokenInfo", "Solnet.TokenInfo\Solnet.TokenInfo.csproj", "{FF8BCCCA-C4F3-44E1-9427-0A28244C3BC9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +25,14 @@ Global
 		{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A9CF38DB-AAD5-45EE-9DF6-FE0A8604C16A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE057CF2-98B8-DF9F-6D54-CEF68ABEAEB8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE057CF2-98B8-DF9F-6D54-CEF68ABEAEB8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE057CF2-98B8-DF9F-6D54-CEF68ABEAEB8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE057CF2-98B8-DF9F-6D54-CEF68ABEAEB8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FF8BCCCA-C4F3-44E1-9427-0A28244C3BC9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FF8BCCCA-C4F3-44E1-9427-0A28244C3BC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FF8BCCCA-C4F3-44E1-9427-0A28244C3BC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FF8BCCCA-C4F3-44E1-9427-0A28244C3BC9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

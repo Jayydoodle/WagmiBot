@@ -14,6 +14,8 @@ using SharpCompress;
 using System.Threading.Channels;
 using Telegram.Bot.Types.Enums;
 using WTelegram.Types;
+using Newtonsoft.Json;
+using Solnet.TokenInfo.Services;
 
 namespace WagmiBot
 {
@@ -537,6 +539,7 @@ namespace WagmiBot
 
             if (user.SelectedChannel != null)
             {
+                // ToDo: Change all += strings to StringBuilder to save memory
                 message += string.Format("\n\nSelected Channel: <b>{0}</b>", user.SelectedChannel.Title);
 
                 if(user.SelectedChannel.SelectedTopic != null)
@@ -566,14 +569,27 @@ namespace WagmiBot
 
         private async Task OnNewUserCreated(WagmiUser user)
         {
-            user.AddressFoundEvent += async (sender, args) =>
-            {
-                await BotClient.SendMessage(
-                    chatId: args.ChatId,
-                    text: string.Format("<b>CA:</b> {0}\n<b>ChatId:</b> {1}", args.ContractAddress, args.SourceChatId),
-                    parseMode: ParseMode.Html
-                );
-            };
+            user.AddressFoundEvent += async (sender, args) => await OnAddressFound(args);
+        }
+
+        private async Task OnAddressFound(AddressFoundEventArgs args)
+        {
+            var tokenInfo = await SolanaTokenInfoService.Instance.GetTokenInfoAsync(args.ContractAddress);
+
+            if (tokenInfo == null)
+                return;
+
+            string message = string.Format(
+                "<b>From ChatId:</b> {0}\n<b>CA:</b> {1}\n<b>Ticker:</b> ${2}\n<b>Name:</b> {3}\n<b>Market Cap:</b> {4}\n<b>Price:</b> {5}\n<b>Volume (24h):</b> {6}\n<b>Holders:</b> {7}\n",
+                args.SourceChatId, tokenInfo.ContractAddress, tokenInfo.Symbol,
+                tokenInfo.Name, tokenInfo.MarketCapFormatted, tokenInfo.PriceInUsd,
+                tokenInfo.Volume24H, tokenInfo.NumberOfHolders);
+
+            await BotClient.SendMessage(
+                chatId: args.ChatId,
+                text: message,
+                parseMode: ParseMode.Html
+            );
         }
 
         #endregion
