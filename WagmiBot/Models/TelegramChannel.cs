@@ -21,21 +21,17 @@ namespace WagmiBot
         public ChatBase Instance { get; set; }
         public ForumTopic SelectedTopic { get; set; }
         public User SelectedUser { get; set; }
-        private Client Client { get; set; }
-        private List<ForumTopic> Topics { get; set; }
-        private List<User> Users { get; set; }
 
         #endregion
 
         #region Life Cycle
 
-        public TelegramChannel(ChatBase chat, Client client)
+        public TelegramChannel(ChatBase chat)
         {
             ID = chat.ID;
             Title = chat.Title;
             ChatType = chat.IsGroup ? Type.Group : Type.Channel;
             Instance = chat;
-            Client = client;
         }
 
         #endregion
@@ -49,41 +45,32 @@ namespace WagmiBot
              || SelectedUser != null && (message.From == null || (message.From != null && message.From.ID != SelectedUser.ID));
         }
 
-        public async Task<IEnumerable<ForumTopic>> GetTopics(Client client)
+        public async Task<List<ForumTopic>> GetTopics(Client client)
         {
-            if (Topics == null)
-            {
-                var query = Task.Run<Messages_ForumTopics>(async () => await Client.Channels_GetAllForumTopics(Instance as Channel)).Result;
+            var query = Task.Run<Messages_ForumTopics>(async () => await client.Channels_GetAllForumTopics(Instance as Channel)).Result;
 
-                Topics = query.topics.Where(x => x is ForumTopic)
+            return query.topics.Where(x => x is ForumTopic)
                                      .Where(x => x.ID != 1) // exclude general topic
                                      .Select(x => (ForumTopic)x)
                                      .OrderBy(x => x.title)
                                      .ToList();
-            }
-
-            return Topics;
         }
 
-        public async Task<IEnumerable<User>> GetUsers(Client client)
+        public async Task<List<User>> GetUsers(Client client)
         {
-            if (Users == null)
-            {
                 var query = await client.Channels_GetAllParticipants(Instance as Channel);
-                Users = query.users.Values.OrderBy(x => x.MainUsername ?? x.first_name).ToList();
-            }
-
-            return Users;
+                return query.users.Values.OrderBy(x => x.MainUsername ?? x.first_name).ToList();
         }
 
-        public static async Task<IEnumerable<TelegramChannel>> GetAll(Client client)
+        public static async Task<List<TelegramChannel>> GetAll(Client client)
         {
             var query = await client.Messages_GetAllChats();
 
             var chats = query.chats.Values
                 .Where(x => x.IsActive)
                 .OrderBy(x => x.Title)
-                .Select(x => new TelegramChannel(x, client));
+                .Select(x => new TelegramChannel(x))
+                .ToList();
 
             return chats;
         }

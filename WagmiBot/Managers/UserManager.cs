@@ -15,8 +15,7 @@ namespace WagmiBot
         #region Properties
 
         public override string Documentation => Docs;
-        private readonly ConcurrentDictionary<long, UserState> UserStates = new ConcurrentDictionary<long, UserState>();
-        private readonly ConcurrentDictionary<long, WTelegram.Client> UserClients = new ConcurrentDictionary<long, WTelegram.Client>();
+        private readonly ConcurrentDictionary<long, WagmiUser> Users = new ConcurrentDictionary<long, WagmiUser>();
 
         #endregion
 
@@ -36,44 +35,18 @@ namespace WagmiBot
 
         #region Public API
 
-        public async Task AddClient(long chatId, Client client)
+        public async Task<WagmiUser> GetUser(long chatId, Func<WagmiUser, Task> onNewUserCreated)
         {
-            UserClients.TryAdd(chatId, client);
-        }
+            Users.TryGetValue(chatId, out WagmiUser user);
 
-        public async Task<Client> GetClient(long chatId)
-        {
-            UserClients.TryGetValue(chatId, out Client client);
-            return client;
-        }
-
-        public async Task RemoveClient(long chatId, Client client = null)
-        {
-            if(client != null)
+            if(user == null)
             {
-                KeyValuePair<long, Client> pair = new KeyValuePair<long, Client>(chatId, client);
-                UserClients.TryRemove(pair);
-            }
-            else
-            {
-                UserClients.TryRemove(chatId, out client);
+                user = new WagmiUser(chatId);
+                await onNewUserCreated(user);
+                Users.TryAdd(chatId, user);
             }
 
-            if (client != null)
-                await client.DisposeAsync();
-        }
-
-        public async Task<UserState> GetState(long chatId)
-        {
-            var state = UserStates.GetOrAdd(chatId, _ => new UserState());
-            await Task.CompletedTask;
-
-            return state;
-        }
-
-        public async Task UpdateState(UserState state)
-        {
-            await Task.CompletedTask;
+            return user;
         }
 
         #endregion

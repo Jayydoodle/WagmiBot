@@ -16,13 +16,13 @@
 //using System.Collections.Concurrent;
 //using SharpCompress;
 
-//namespace WagmiBot
+//namespace WagmiBot.Deprecated
 //{
 //    public class TelegramManager : ManagerBase<TelegramManager>
 //    {
 //        #region Properties: Telegram Client
 
-//        private WTelegram.Client TelegramClient { get; set; }
+//        private Client TelegramClient { get; set; }
 //        private UpdateManager UpdateManager { get; set; }
 //        private User CurrentUser { get; set; }
 //        private TelegramChannel SourceChannel { get; set; }
@@ -43,7 +43,7 @@
 //        protected override bool Initialize()
 //        {
 //            if (TelegramClient == null)
-//                TelegramClient = new WTelegram.Client(Config);
+//                TelegramClient = new Client(Config);
 
 //            LoginUser();
 //            return true;
@@ -95,7 +95,7 @@
 
 //            CurrentUser = null;
 
-//             LoginUser();
+//            LoginUser();
 //        }
 
 //        [Documentation(SelectChannelDocumentation)]
@@ -257,60 +257,6 @@
 
 //        #region Private API
 
-//        private async Task Client_OnUpdate(Update update)
-//        {
-//            switch (update)
-//            {
-//                case UpdateNewMessage unm: await HandleMessage(unm.message); break;
-//            }
-
-//            await Task.CompletedTask;
-//        }
-
-//        private Task HandleMessage(MessageBase messageBase, bool edit = false)
-//        {
-//            ChannelSemaphore.Wait();
-
-//            if (SourceChannel == null || SourceChannel.Invalidate(messageBase))
-//            {
-//                ChannelSemaphore.Release();
-//                return Task.CompletedTask;
-//            }
-
-//            ChannelSemaphore.Release();
-
-//            if (!(messageBase is Message message && !string.IsNullOrEmpty(message.message)))
-//                return Task.CompletedTask;
-
-//            bool foundSolanaAddress = false;
-//            PublicKey publicKey = null;
-
-//            foreach (string piece in message.message.Split(new char[] { '\n', '\t', '\r' }))
-//            {
-//                try
-//                {
-//                    publicKey = new PublicKey(piece);
-//                }
-//                catch (Exception)
-//                {
-//                    publicKey = null;
-//                }
-
-//                foundSolanaAddress = publicKey != null && publicKey.IsValid();
-
-//                if (foundSolanaAddress)
-//                    break;
-//            }
-
-//            if (foundSolanaAddress && !SeenAddresses.Contains(publicKey.Key))
-//            {
-//                SeenAddresses.Add(publicKey.Key);
-//                ContractAddressQueue.Enqueue(publicKey.Key);
-//            }
-
-//            return Task.CompletedTask;
-//        }
-
 //        private void SendMessage(string text)
 //        {
 //            ChannelSemaphore.Wait();
@@ -324,7 +270,7 @@
 //                    replyTo = new InputReplyToMessage() { top_msg_id = SourceChannel.SelectedTopic.id, reply_to_msg_id = SourceChannel.SelectedTopic.id, flags = InputReplyToMessage.Flags.has_top_msg_id };
 
 //                if (!string.IsNullOrEmpty(text))
-//                    Task.Run<UpdatesBase>(async () => await TelegramClient.Messages_SendMessage(target, text, Helpers.RandomLong(), replyTo));
+//                    Task.Run(async () => await TelegramClient.Messages_SendMessage(target, text, Helpers.RandomLong(), replyTo));
 //            }
 
 //            ChannelSemaphore.Release();
@@ -403,7 +349,7 @@
 //            try
 //            {
 //                if (CurrentUser == null)
-//                    CurrentUser = Task.Run<User>(async () => await TelegramClient.LoginUserIfNeeded()).Result;
+//                    CurrentUser = Task.Run(async () => await TelegramClient.LoginUserIfNeeded()).Result;
 
 //                ChannelSemaphore.Wait();
 
