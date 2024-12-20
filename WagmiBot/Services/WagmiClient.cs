@@ -3,11 +3,16 @@ using WTelegram;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.ReplyMarkups;
 using TL;
+using JConsole;
 using ReplyKeyboardMarkup = Telegram.Bot.Types.ReplyMarkups.ReplyKeyboardMarkup;
 using KeyboardButton = Telegram.Bot.Types.ReplyMarkups.KeyboardButton;
 using Message = Telegram.Bot.Types.Message;
 using Update = Telegram.Bot.Types.Update;
-using JConsole;
+using BotCommand = Telegram.Bot.Types.BotCommand;
+using Spectre.Console;
+using SharpCompress;
+using System.Threading.Channels;
+using Telegram.Bot.Types.Enums;
 
 namespace WagmiBot
 {
@@ -19,7 +24,7 @@ namespace WagmiBot
         private string APIHash { get; set; }
 
         private TelegramBotClient BotClient;
-        private UserClientManager UserManager => UserClientManager.Instance;
+        private UserManager UserManager => UserManager.Instance;
 
 
         #endregion
@@ -36,6 +41,15 @@ namespace WagmiBot
         public async Task StartBotAsync(CancellationToken cancellationToken = default)
         {
             var me = await BotClient.GetMe(cancellationToken);
+
+            await BotClient.SetMyCommands(
+            commands: new List<BotCommand>()
+            {
+                new BotCommand(){ Command = Command.Start, Description="Main Menu" },
+                // new BotCommand(){ Command = Command.Help, Description="Help" },
+                // new BotCommand(){ Command = Command.Settings, Description="Settings" }
+            },
+            cancellationToken: cancellationToken);
 
             BotClient.StartReceiving(
                 updateHandler: HandleUpdateAsync,
@@ -72,7 +86,7 @@ namespace WagmiBot
         private async Task HandleMessageUpdate(ITelegramBotClient botClient, Message message, CancellationToken cancellationToken)
         {
             var chatId = message.Chat.Id;
-            var userState = UserManager.UserStates.GetOrAdd(chatId, _ => new UserState());
+            UserState userState = await UserManager.GetState(chatId);
 
             switch (userState.CurrentState)
             {
@@ -100,12 +114,15 @@ namespace WagmiBot
         private async Task HandleCallbackUpdate(ITelegramBotClient botClient, CallbackQuery query, CancellationToken cancellationToken)
         {
             var chatId = query.From.Id;
-            UserManager.UserStates.TryGetValue(chatId, out UserState userState);
+            UserState userState = await UserManager.GetState(chatId);
 
             switch (userState.CurrentState)
             {
                 case State.AwaitingVerificationCode:
-                    HandleVerificationCode(query, userState);
+                    await HandleVerificationCode(query, userState);
+                    break;
+                case State.Authenticated:
+                    await HandleUserRequest(query, userState);
                     break;
             }
         }
@@ -116,7 +133,7 @@ namespace WagmiBot
 
         private async Task HandleInitialState(Message message, UserState state)
         {
-            UserManager.UserClients.TryGetValue(message.Chat.Id, out Client client);
+            Client client = await UserManager.GetClient(message.Chat.Id);
 
             // If we already have a client loaded for this user, just return
             if (client != null && client.UserId != 0)
@@ -127,12 +144,11 @@ namespace WagmiBot
             else if (client != null)
             {
                 // Otherwise remove 
-                await client.DisposeAsync();
-                UserManager.UserClients.TryRemove(message.Chat.Id, out client);
+                await UserManager.RemoveClient(message.Chat.Id, client);
             }
 
-            DirectoryInfo dir = FileUtil.GetOrCreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "sessions"));
-            state.SessionPath = Path.Combine(dir.FullName, message.From.Id.ToString());
+            DirectoryInfo dir = FileUtil.GetOrCreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "users", message.From.Id.ToString()));
+            state.SessionPath = Path.Combine(dir.FullName, "session");
 
             // Otherwise try to login via the stored session info
             client = new WTelegram.Client(what => Config(what, state));
@@ -141,7 +157,7 @@ namespace WagmiBot
             // If the client was loaded successfully without asking the user for input, mark as authenticated
             if (client != null && client.UserId != 0)
             {
-                UserManager.UserClients.TryAdd(message.Chat.Id, client);
+                await UserManager.AddClient(message.Chat.Id, client);
                 state.CurrentState = State.Authenticated;
                 await HandleUserRequest(message, state);
                 return;
@@ -151,7 +167,7 @@ namespace WagmiBot
                 if (client != null)
                     await client.DisposeAsync();
 
-                state.CurrentState = State.AwaitingPhoneNumber;
+                state.MoveToNextState();
                 await BotClient.SendMessage(
                     chatId: message.Chat.Id,
                     text: "Please enter your phone number in international format (e.g., +1234567890):"
@@ -161,74 +177,66 @@ namespace WagmiBot
 
         private async Task HandlePhoneNumber(Message message, UserState state)
         {
-            var phoneNumber = message.Text?.Trim();
+            var phoneNumber = message.Text?.Trim()?.Replace("+", string.Empty);
 
-            if (string.IsNullOrEmpty(phoneNumber))
+            if (string.IsNullOrEmpty(phoneNumber) || !phoneNumber.IsNumeric())
             {
                 await BotClient.SendMessage(
                     chatId: message.Chat.Id,
-                    text: "Invalid phone number format. Please enter your phone number starting with + symbol:"
+                    text: "Invalid phone number format. Please enter your phone number:"
                 );
+
                 return;
             }
 
             state.PhoneNumber = phoneNumber;
-            state.CurrentState = State.AwaitingVerificationCode;
+            WTelegram.Client client = null;
+            state.MoveToNextState();
 
-            var client = new WTelegram.Client(what => Config(what, state));
-            await client.ConnectAsync();
+            try
+            {
+                client = new WTelegram.Client(what => Config(what, state));
+                await client.ConnectAsync();
 
-            Auth_SentCode sentCode = await client.Auth_SendCode(state.PhoneNumber, APIKey, APIHash, new CodeSettings()) as Auth_SentCode;
-            state.SentCode = sentCode;
+                Auth_SentCode sentCode = await client.Auth_SendCode(state.PhoneNumber, APIKey, APIHash, new CodeSettings()) as Auth_SentCode;
+                state.SentCode = sentCode;
 
-            UserManager.UserClients.TryAdd(message.Chat.Id, client);
+                await UserManager.AddClient(message.Chat.Id, client);
+            }
+            catch (System.Exception)
+            {
+                state.MoveToPreviousState();
+                throw;
+            }
 
             await BotClient.SendMessage(
                 chatId: message.Chat.Id,
                 text: "Please enter the verification code sent to your Telegram app:",
-                replyMarkup: UIElement.GetInlineKeyboard()
+                replyMarkup: UIElement.GetInlineNumericKeyboard()
             );
         }
 
         private async Task HandlePassword(Message message, UserState state)
         {
             state.Password = message.Text;
-            state.CurrentState = State.AwaitingVerificationCode;
+            state.MoveToNextState();
 
-            UserManager.UserClients.TryGetValue(message.Chat.Id, out Client client);
+            Client client = await UserManager.GetClient(message.Chat.Id);
 
-            try
+            bool authenticated = await TryLoginUser(client, state);
+
+            if (!authenticated) 
             {
-                Auth_AuthorizationBase authorization = null;
+                state.MoveToPreviousState();
 
-                try
-                {
-                    authorization = await client.Auth_SignIn(state.PhoneNumber, state.SentCode.phone_code_hash, state.VerificationCode);
-                }
-                catch (RpcException e) when (e.Code == 400 && e.Message == "PHONE_CODE_INVALID")
-                {
-                    throw;
-                }
-                catch (RpcException e) when (e.Code == 401 && e.Message == "SESSION_PASSWORD_NEEDED")
-                {
-                    authorization = null;
-                }
-
-                state.CurrentUser = client.LoginAlreadyDone(authorization);
-                state.CurrentState = State.Authenticated;
-
-                await ShowMainMenu(message.Chat.Id);
-            }
-            catch (Exception ex)
-            {
                 await BotClient.SendMessage(
                     chatId: message.Chat.Id,
-                    text: $"Failed to send verification code: {ex.Message}\nPlease start over."
+                    text: $"Login failed, please try again."
                 );
-                state.CurrentState = State.Initial;
-
-                if (UserManager.UserClients.TryRemove(message.Chat.Id, out var oldClient))
-                    await oldClient.DisposeAsync();
+            }
+            else
+            {
+                await ShowMainMenu(message.Chat.Id, state);
             }
         }
 
@@ -244,23 +252,47 @@ namespace WagmiBot
             string message = null;
             bool reset = false;
 
+            Client client = await UserManager.GetClient(query.From.Id);
+
             switch (query.Data)
             {
-                case Command.Submit:
+                case var value when value == Command.Submit:
 
                     reset = true;
                     message = verificationCode;
                     state.VerificationCode = verificationCode.Replace("-", string.Empty);
                     state.CurrentState = State.AwaitingPassword;
 
-                    await BotClient.SendMessage(
-                        chatId: query.From.Id,
-                        text: "Enter your password:"
-                    );
+                    bool authenticated = await TryLoginUser(client, state);
+
+                    if(authenticated)
+                    {
+                        await ShowMainMenu(query.From.Id, state);
+                    }
+                    else if(!authenticated && state.NeedsPasswordVerification)
+                    {
+                        // ToDo: Only move to the next state if we're not authenticated due to 2FA, NOT if it was a different exception
+                        // the above may already work?
+                        state.MoveToNextState();
+
+                        await BotClient.SendMessage(
+                            chatId: query.From.Id,
+                            text: "Enter your password:"
+                        );
+                    }
+                    else if (!authenticated)
+                    {
+                        state.MoveToPreviousState();
+
+                        await BotClient.SendMessage(
+                            chatId: query.From.Id,
+                            text: "An error occured, please try again:"
+                        );
+                    }
 
                     break;
 
-                case Command.Reset:
+                case var value when value == Command.Reset:
 
                     message = originalMessage;
 
@@ -281,7 +313,7 @@ namespace WagmiBot
                 chatId: query.From.Id,
                 messageId: query.Message.Id,
                 text: message,
-                replyMarkup: reset ? null : UIElement.GetInlineKeyboard()
+                replyMarkup: reset ? null : UIElement.GetInlineNumericKeyboard()
             );
         }
 
@@ -305,151 +337,233 @@ namespace WagmiBot
 
         private async Task HandleUserRequest(Message message, UserState state)
         {
-            if (UserManager.UserClients.TryGetValue(message.Chat.Id, out var client))
+            Client client = await UserManager.GetClient(message.Chat.Id);
+
+            // ToDo: Error logging / handling
+            if (client == null)
+                return;
+
+            switch (message.Text)
             {
-                switch (message.Text)
-                {
-                    case Command.Start:
-                        ShowMainMenu(message.Chat.Id);
-                        break;
-                    case Command.SelectChannel:
-                        await HandleSelectChannel(message.Chat.Id, client);
-                        break;
-                    case Command.SelectUser:
-                        await HandleSelectChannelUser(message.Chat.Id, client, state);
-                        break;
-                    case Command.SelectTopic:
-                        await HandleSelectTopic(message.Chat.Id, client, state);
-                        break;
-                    case Command.ViewChannels:
-                        await HandleViewChannels(message.Chat.Id, client);
-                        break;
-                }
+                case var value when value == Command.Start:
+                    await ShowMainMenu(message.Chat.Id, state);
+                    break;
             }
         }
 
-        private async Task HandleSelectChannel(long chatId, WTelegram.Client client)
+        private async Task HandleUserRequest(CallbackQuery query, UserState state)
         {
-            var channels = TelegramChannel.GetAll(client);
-            var keyboard = new List<List<KeyboardButton>>();
+            Client client = await UserManager.GetClient(query.From.Id);
 
-            foreach (var channel in channels)
+            // ToDo: Error logging / handling
+            if (client == null)
+                return;
+
+            if (query.Message?.Text == Command.SelectChannelPrompt)
             {
-                keyboard.Add(new List<KeyboardButton>
-                {
-                    new KeyboardButton(channel.Title)
-                });
+                await HandleSelectChannel(query, client, state);
+                return;
             }
 
-            var replyMarkup = new ReplyKeyboardMarkup(keyboard)
+            if (query.Message?.Text == Command.SelectTopicPrompt)
             {
-                ResizeKeyboard = true
-            };
+                await HandleSelectChannelTopic(query, client, state);
+                return;
+            }
+
+            if (query.Message?.Text == Command.SelectUserPrompt)
+            {
+                await HandleSelectChannelUser(query, client, state);
+                return;
+            }
+
+            switch (query.Data)
+            {
+                case var value when value == Command.SelectChannel:
+                    await PromptSelectChannel(query, client);
+                    break;
+                case var value when value == Command.SelectTopic:
+                    await PromptSelectChannelTopic(query, client, state);
+                    break;
+                case var value when value == Command.SelectUser:
+                    await PromptSelectChannelUser(query, client, state);
+                    break;
+                case var value when value == Command.ViewChannels:
+                    await HandleViewChannels(query, client);
+                    break;
+            }
+        }
+
+        private async Task PromptSelectChannel(CallbackQuery query, WTelegram.Client client)
+        {
+            var channels = await TelegramChannel.GetAll(client);
+            var keyboard = new InlineKeyboardMarkup();
+            keyboard.AddNewRow(Command.Remove);
+            channels.ForEach(x => keyboard.AddNewRow(string.Format(Constants.SelectionFormat, x.Title, x.ID)));
 
             await BotClient.SendMessage(
-                chatId: chatId,
-                text: "Select a channel:",
-                replyMarkup: replyMarkup
+                chatId: query.From.Id,
+                text: Command.SelectChannelPrompt,
+                replyMarkup: keyboard,
+                parseMode: ParseMode.Html
             );
         }
 
-        private async Task HandleSelectChannelUser(long chatId, WTelegram.Client client, UserState state)
+        private async Task HandleSelectChannel(CallbackQuery query, WTelegram.Client client, UserState state)
+        {
+            string selection = query.Data.Split(':').Select(x => x.Trim()).ToList().Last();
+
+            if (string.IsNullOrEmpty(selection) || selection == Command.Remove)
+            {
+                // ToDo: Probably need concurrency locking around this
+                var channels = await TelegramChannel.GetAll(client);
+                state.SelectedChannel = null;
+            }
+            else
+            {
+                long channelId = long.Parse(selection);
+                var channels = await TelegramChannel.GetAll(client);
+                state.SelectedChannel = channels.FirstOrDefault(x => x.ID == channelId);
+            }
+
+            await ShowMainMenu(query.From.Id, state);
+        }
+
+        private async Task PromptSelectChannelUser(CallbackQuery query, WTelegram.Client client, UserState state)
         {
             if (state.SelectedChannel == null)
             {
                 await BotClient.SendMessage(
-                    chatId: chatId,
+                    chatId: query.From.Id,
                     text: "Please select a channel first."
                 );
+
                 return;
             }
 
-            var users = state.SelectedChannel.Users;
-            var keyboard = new List<List<KeyboardButton>>();
-
-            foreach (var user in users)
-            {
-                var username = user.MainUsername ?? user.first_name;
-                keyboard.Add(new List<KeyboardButton>
-                {
-                    new KeyboardButton(username)
-                });
-            }
-
-            var replyMarkup = new ReplyKeyboardMarkup(keyboard)
-            {
-                ResizeKeyboard = true
-            };
+            var users = await state.SelectedChannel.GetUsers(client);
+            var keyboard = new InlineKeyboardMarkup();
+            keyboard.AddNewRow(Command.Remove);
+            users.ForEach(x => keyboard.AddNewRow(string.Format(Constants.SelectionFormat, x.MainUsername ?? x.first_name, x.id)));
 
             await BotClient.SendMessage(
-                chatId: chatId,
-                text: "Select a user:",
-                replyMarkup: replyMarkup
+                chatId: query.From.Id,
+                text: Command.SelectUserPrompt,
+                replyMarkup: keyboard,
+                parseMode: ParseMode.Html
             );
         }
 
-        private async Task HandleSelectTopic(long chatId, WTelegram.Client client, UserState state)
+        private async Task HandleSelectChannelUser(CallbackQuery query, WTelegram.Client client, UserState state)
+        {
+            string selection = query.Data.Split(':').Select(x => x.Trim()).ToList().Last();
+
+            if (string.IsNullOrEmpty(selection) || selection == Command.Remove)
+            {
+                // ToDo: Probably need concurrency locking around this
+                state.SelectedChannel.SelectedUser = null;
+            }
+            else
+            {
+                long userId = long.Parse(selection);
+                var users = await state.SelectedChannel.GetUsers(client);
+                state.SelectedChannel.SelectedUser = users.FirstOrDefault(x => x.ID == userId);
+            }
+
+            await ShowMainMenu(query.From.Id, state);
+        }
+
+        private async Task PromptSelectChannelTopic(CallbackQuery query, WTelegram.Client client, UserState state)
         {
             if (state.SelectedChannel == null)
             {
                 await BotClient.SendMessage(
-                    chatId: chatId,
+                    chatId: query.From.Id,
                     text: "Please select a channel first."
                 );
+
                 return;
             }
 
-            var topics = state.SelectedChannel.Topics;
-            var keyboard = new List<List<KeyboardButton>>();
-
-            foreach (var topic in topics)
-            {
-                keyboard.Add(new List<KeyboardButton>
-                {
-                    new KeyboardButton(topic.title)
-                });
-            }
-
-            var replyMarkup = new ReplyKeyboardMarkup(keyboard)
-            {
-                ResizeKeyboard = true
-            };
+            var topics = await state.SelectedChannel.GetTopics(client);
+            var keyboard = new InlineKeyboardMarkup();
+            keyboard.AddNewRow(Command.Remove);
+            topics.ForEach(x => keyboard.AddNewRow(string.Format(Constants.SelectionFormat, x.title, x.id)));
 
             await BotClient.SendMessage(
-                chatId: chatId,
-                text: "Select a topic:",
-                replyMarkup: replyMarkup
+                chatId: query.From.Id,
+                text: Command.SelectTopicPrompt,
+                replyMarkup: keyboard,
+                parseMode: ParseMode.Html
             );
         }
 
-        private async Task HandleViewChannels(long chatId, WTelegram.Client client)
+        private async Task HandleSelectChannelTopic(CallbackQuery query, WTelegram.Client client, UserState state)
         {
-            var channels = TelegramChannel.GetAll(client);
+            string selection = query.Data.Split(':').Select(x => x.Trim()).ToList().Last();
+
+            if (string.IsNullOrEmpty(selection) || selection == Command.Remove)
+            {
+                // ToDo: Probably need concurrency locking around this
+                state.SelectedChannel.SelectedTopic = null;
+            }
+            else
+            {
+                long topicId = long.Parse(selection);
+                var topics = await state.SelectedChannel.GetTopics(client);
+                state.SelectedChannel.SelectedTopic = topics.FirstOrDefault(x => x.ID == topicId);
+            }
+
+            await ShowMainMenu(query.From.Id, state);
+        }
+
+        private async Task HandleViewChannels(CallbackQuery query, WTelegram.Client client)
+        {
+            var channels = await TelegramChannel.GetAll(client);
             var channelList = new System.Text.StringBuilder();
 
             foreach (var channel in channels)
             {
-                channelList.AppendLine($"{channel.Title} (ID: {channel.ID})");
+                channelList.AppendLine($"<b>{channel.Title}</b> (ID: {channel.ID})");
+            }
+
+            await BotClient.SendMessage(
+                chatId: query.From.Id,
+                text: channelList.ToString(),
+                parseMode: ParseMode.Html
+            );
+        }
+
+        private async Task ShowMainMenu(long chatId, UserState state)
+        {
+            var mainMenuKeyboard = new InlineKeyboardMarkup()
+            .AddNewRow(Command.ViewChannels)
+            .AddNewRow(Command.SelectChannel, Command.SelectTopic, Command.SelectUser);
+
+            string message = string.Format("<b>========== WAGMI BOT ==========</b>\n" +
+            "Wagmi allows you to copy automatically copy trade calls from your favorite Telegram groups/users\n\n" +
+            "<b>{0}</b> - View the channels you're a member of\n" +
+            "<b>{1}</b> - Select the channel to copy trades from\n" +
+            "<b>{2}</b> - Select the topic in the channel to copy trades from (must select a channel first)\n" +
+            "<b>{3}</b> - Select a user in the channel to copy trades from (must select a channel first)"
+            , Command.ViewChannels, Command.SelectChannel, Command.SelectTopic, Command.SelectUser);
+
+            if (state.SelectedChannel != null)
+            {
+                message += string.Format("\n\nSelected Channel: <b>{0}</b>", state.SelectedChannel.Title);
+
+                if(state.SelectedChannel.SelectedTopic != null)
+                    message += string.Format("\nSelected Topic: <b>{0}</b>", state.SelectedChannel.SelectedTopic.title);
+
+                if (state.SelectedChannel.SelectedUser is TL.User user)
+                    message += string.Format("\nSelected User: <b>{0}</b>", user.MainUsername ?? user.first_name);
             }
 
             await BotClient.SendMessage(
                 chatId: chatId,
-                text: channelList.ToString()
-            );
-        }
-
-        private async Task ShowMainMenu(long chatId)
-        {
-            var mainMenuKeyboard = new ReplyKeyboardMarkup()
-            .AddNewRow(Command.ViewChannels)
-            .AddNewRow(Command.SelectChannel, Command.SelectTopic, Command.SelectUser);
-
-            mainMenuKeyboard.ResizeKeyboard = true;
-
-            await BotClient.SendMessage(
-                chatId: chatId,
-                text: "Welcome! Please select an option:",
-                replyMarkup: mainMenuKeyboard
+                text: message,
+                replyMarkup: mainMenuKeyboard,
+                parseMode: ParseMode.Html
             );
         }
 
@@ -463,13 +577,64 @@ namespace WagmiBot
             return Task.CompletedTask;
         }
 
+        private static async Task<bool> TryLoginUser(Client client, UserState state)
+        {
+            bool authenticated = false;
+            Auth_AuthorizationBase authorization = null;
+
+            try
+            {
+                authorization = await client.Auth_SignIn(state.PhoneNumber, state.SentCode.phone_code_hash, state.VerificationCode);
+            }
+            catch (RpcException e) when (e.Code == 400 && e.Message == "PHONE_CODE_INVALID")
+            {
+                throw;
+            }
+            catch (RpcException e) when (e.Code == 401 && e.Message == "SESSION_PASSWORD_NEEDED")
+            {
+                if (!string.IsNullOrEmpty(state.Password))
+                {
+                        try
+                        {
+                            var accountPassword = await client.Account_GetPassword();
+                            var checkPasswordSRP = await Client.InputCheckPassword(accountPassword, state.Password);
+                            authorization = await client.Auth_CheckPassword(checkPasswordSRP);
+                        }
+                        catch (RpcException pe) when (pe.Code == 400 && pe.Message == "PASSWORD_HASH_INVALID")
+                        {
+                            throw;
+                        }
+                }
+                else
+                {
+                    state.NeedsPasswordVerification = true;
+                }
+            }
+
+            try
+            {
+
+                state.CurrentUser = client.LoginAlreadyDone(authorization);
+                state.CurrentState = State.Authenticated;
+
+                if (client.UserId != 0)
+                    authenticated = true;
+            }
+            catch (System.Exception e)
+            {
+                throw;
+            }
+
+            return authenticated;
+        }
+
         #endregion
 
         #region Supporting Classes
 
         private static class UIElement
         {
-            public static InlineKeyboardMarkup GetInlineKeyboard()
+            public static InlineKeyboardMarkup GetInlineNumericKeyboard()
             {
                 return new InlineKeyboardMarkup()
                                 .AddNewRow("1", "2", "3")
@@ -480,15 +645,26 @@ namespace WagmiBot
             }
         }
 
+        private class Constants
+        {
+            public static string SelectionFormat = "{0} : {1}";
+        }
+
         private class Command
         {
-            public const string Start = "/start";
-            public const string Reset = "Reset";
-            public const string Submit = "Submit";
-            public const string SelectChannel = "Select Channel";
-            public const string SelectUser = "Select User";
-            public const string SelectTopic = "Select Topic";
-            public const string ViewChannels = "View Channels";
+            public static string Help = "/help";
+            public static string Settings = "/settings";
+            public static string Start = "/start";
+            public static string Reset = "Reset";
+            public static string Submit = "Submit";
+            public static string Remove = "--- REMOVE ---";
+            public static string SelectChannel = "Select Channel " + Spectre.Console.Emoji.Known.Television;
+            public static string SelectChannelPrompt = "Select a channel:";
+            public static string SelectUser = "Select User " + Spectre.Console.Emoji.Known.PersonLiftingWeights;
+            public static string SelectUserPrompt = "Select a user:";
+            public static string SelectTopic = "Select Topic " + Spectre.Console.Emoji.Known.Notebook;
+            public static string SelectTopicPrompt = "Select a topic:";
+            public static string ViewChannels = "View Channels " + Spectre.Console.Emoji.Known.Eyes;
         }
 
         #endregion

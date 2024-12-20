@@ -95,7 +95,7 @@
 
 //            CurrentUser = null;
 
-//            // LoginUser();
+//             LoginUser();
 //        }
 
 //        [Documentation(SelectChannelDocumentation)]

@@ -4,7 +4,6 @@ namespace WagmiBot
 {
     public class Settings : SettingsNode<Settings>
     {
-
         #region Constants
 
         public const int MinSyncInterval = 1;
@@ -14,7 +13,6 @@ namespace WagmiBot
         public const int DefaultPurgeInterval = 60;
 
         #endregion
-
 
         #region Properties
 

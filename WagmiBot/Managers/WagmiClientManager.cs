@@ -18,6 +18,7 @@ namespace WagmiBot
 
         private WagmiClient WagmiClient;
         private Task RunTask { get; set; }
+        public override string Documentation => Docs;
 
         #endregion
 
@@ -44,7 +45,6 @@ namespace WagmiBot
             return true;
         }
 
-        [Documentation(Documentation)]
         protected override List<MenuOption> GetMenuOptions()
         {
             List<MenuOption> menuOptions = new List<MenuOption>();
@@ -78,7 +78,7 @@ namespace WagmiBot
 
         #region Documentation 
 
-        private const string Documentation = "An interface for configuring and monitoring the WagmiBot Telegram bot";
+        private const string Docs = "An interface for configuring and monitoring the WagmiBot Telegram bot";
         private const string StartBotDocumentation = "Starts the instance of the bot and starts responding to user input from Telegram";
 
         #endregion

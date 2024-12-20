@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Telegram.Bot.Types;
 using TL;
 using WTelegram;
+using ForumTopic = TL.ForumTopic;
+using User = TL.User;
 
 namespace WagmiBot
 {
@@ -16,61 +19,11 @@ namespace WagmiBot
         public string Title { get; set; }
         public Type ChatType { get; set; }
         public ChatBase Instance { get; set; }
-
-        private List<ForumTopic> _topics;
-        public List<ForumTopic> Topics
-        {
-            get
-            {
-                if(_topics == null)
-                {
-                    _topics = new List<ForumTopic>();
-
-                    try
-                    {
-                        var query = Task.Run<Messages_ForumTopics>(async () => await Client.Channels_GetAllForumTopics(Instance as Channel)).Result;
-
-                        _topics = query.topics.Where(x => x is ForumTopic)
-                                              .Where(x => x.ID != 1) // exclude general topic
-                                              .Select(x => x as ForumTopic)
-                                              .ToList();
-                    }
-                    catch (Exception)
-                    {
-                    }
-                }
-
-                return _topics;
-            }
-        }
-
-        private List<User> _users;
-        public List<User> Users
-        {
-            get
-            {
-                if (_users == null)
-                {
-                    _users = new List<User>();
-
-                    try
-                    {
-                        var query = Task.Run<Channels_ChannelParticipants>(async () => await Client.Channels_GetAllParticipants(Instance as Channel)).Result;
-                        _users = query.users.Values.ToList();
-                    }
-                    catch (Exception)
-                    {
-                    }
-                }
-
-                return _users;
-            }
-        }
-
         public ForumTopic SelectedTopic { get; set; }
         public User SelectedUser { get; set; }
-
         private Client Client { get; set; }
+        private List<ForumTopic> Topics { get; set; }
+        private List<User> Users { get; set; }
 
         #endregion
 
@@ -96,9 +49,37 @@ namespace WagmiBot
              || SelectedUser != null && (message.From == null || (message.From != null && message.From.ID != SelectedUser.ID));
         }
 
-        public static IEnumerable<TelegramChannel> GetAll(Client client)
+        public async Task<IEnumerable<ForumTopic>> GetTopics(Client client)
         {
-            var query = Task.Run<Messages_Chats>(async () => await client.Messages_GetAllChats()).Result;
+            if (Topics == null)
+            {
+                var query = Task.Run<Messages_ForumTopics>(async () => await Client.Channels_GetAllForumTopics(Instance as Channel)).Result;
+
+                Topics = query.topics.Where(x => x is ForumTopic)
+                                     .Where(x => x.ID != 1) // exclude general topic
+                                     .Select(x => (ForumTopic)x)
+                                     .OrderBy(x => x.title)
+                                     .ToList();
+            }
+
+            return Topics;
+        }
+
+        public async Task<IEnumerable<User>> GetUsers(Client client)
+        {
+            if (Users == null)
+            {
+                var query = await client.Channels_GetAllParticipants(Instance as Channel);
+                Users = query.users.Values.OrderBy(x => x.MainUsername ?? x.first_name).ToList();
+            }
+
+            return Users;
+        }
+
+        public static async Task<IEnumerable<TelegramChannel>> GetAll(Client client)
+        {
+            var query = await client.Messages_GetAllChats();
+
             var chats = query.chats.Values
                 .Where(x => x.IsActive)
                 .OrderBy(x => x.Title)
